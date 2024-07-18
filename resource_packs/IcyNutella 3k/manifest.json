@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "header": {
+    "description": "Pack by rasiav",
+    "name": "rasiav cpvp",
+    "uuid": "593616de-1533-3c0f-b2d5-5e55410bf994",
+    "version": [
+      0,
+      0,
+      1
+    ],
+    "min_engine_version": [
+      1,
+      2,
+      6
+    ]
+  },
+  "modules": [
+    {
+      "description": "0523",
+      "version": [
+        0,
+        0,
+        1
+      ],
+      "uuid": "7ed90e58-43c4-4794-9185-d49c0e9cc78d",
+      "type": "resources"
+    }
+  ]
+}
