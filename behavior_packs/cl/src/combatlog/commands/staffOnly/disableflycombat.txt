@@ -1,0 +1,15 @@
+import { clSettings } from "../../../combatlog";
+import { sendPlayerMessage } from "../../../stuff/commonUtils";
+import { Command } from "../../../stuff/handler";
+
+new Command({
+    name: `disableelytracombat`,
+    aliases: [`disableflycombat`, `dfc`, `disablefc`],
+    staffOnly: true,
+    code({ player, args }) {
+        if (!args[0]) return sendPlayerMessage(player, `§aDisableElytraCombat is set to ${clSettings.get(`disableelytracombat`)}`);
+        if (![`true`, `false`].includes(args[0].toLowerCase())) return sendPlayerMessage(player, `§8[§cX§8] §cError, must be true || false`);
+        clSettings.set(`disableelytracombat`, args[0].toLowerCase());
+        sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully set DisableElytraCombat to §f${args[0]}`);
+    },
+});

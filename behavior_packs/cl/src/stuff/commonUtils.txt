@@ -1,0 +1,185 @@
+import { Player, system, world } from "@minecraft/server";
+import { config } from "./config";
+import { commands } from "./handler";
+
+
+/**
+ * Send a message to a player
+ * @param player Player to send the message to
+ * @param message Message the player will be sent
+ * @param removeSpaces Whether to remove repeated spaces
+ */
+export function sendPlayerMessage(player: Player, message: string, removeSpaces: boolean = false) {
+    if (removeSpaces) {
+        player.sendMessage(`${message.replaceAll(/(\r\n|\r|\n)/g, `\n`).replaceAll(/  +/g, ``)}`);
+    }
+    else {
+        player.sendMessage(`${message}`);
+    }
+}
+
+/**
+ * Send every player a message
+ * @param player Player that will send the message
+ * @param message Message that will be sent
+ * @param removeSpaces Whether to remove repeated spaces
+ */
+export function sendAllMessage(message: string, removeSpaces: boolean = false, requiredTag?: string) {
+    if (removeSpaces) {
+        for (let player of world.getAllPlayers()) {
+            if (requiredTag && !player.hasTag(requiredTag)) continue;
+            player.sendMessage(`${message.replaceAll(/(\r\n|\r|\n)/g, `\n`).replaceAll(/  +/g, ``)}`);
+        }
+    }
+    else {
+        for (let player of world.getAllPlayers()) {
+            if (requiredTag && !player.hasTag(requiredTag)) continue;
+            player.sendMessage(`${message}`);
+        }
+    }
+}
+
+export function helpMoreInfo(player: Player, args: string[]) {
+    const cmdData = commands.find(c => c.name.toLowerCase() === args[0]?.toLowerCase() || c.aliases?.includes(args[0]?.toLowerCase()));
+    if (cmdData) {
+        if ((cmdData.staffOnly || cmdData.altHelpMenu) && !(player.isOp() || player.hasTag(`lifesteal-opped`))) {
+            sendPlayerMessage(player, `§cYou do not have permission to do this!`);
+            return true;
+        }
+
+        // Check if the command is staff only
+        if ((cmdData.staffOnly || cmdData.altHelpMenu) && cmdData.helpMenu && cmdData.helpMenu !== `none`) {
+            cmdData.helpMenu = cmdData.helpMenu.replaceAll(`§e`, `§9`).replaceAll(`§g`, `§u`);
+        }
+
+        // Check for an alternative help menu that is used when a player doesn't have ls-op
+        if (cmdData.altHelpMenu && !(player.isOp() || player.hasTag(`lifesteal-opped`))) {
+            sendPlayerMessage(player, `${cmdData.altHelpMenu}`);
+            return true;
+        }
+
+        if (!cmdData.helpMenu) {
+            sendPlayerMessage(player, `§cThere is no available help menu, this is a bug and should be reported to GamerDos. He probably forgot to put a help menu because hes stupid lmao (Discord: https://dsc.gg/gamerdos). Anyway heres a placeholder help menu:
+
+Command Name: ${cmdData.name}
+Staff Only: ${cmdData.staffOnly}
+Command aliases: [
+    ${cmdData.aliases?.join(`\n    `) ?? `none`}
+]`);
+            return true;
+        }
+
+        if (cmdData.helpMenu === `none`) {
+            sendPlayerMessage(player, `§cNo help menu available for this command! (${config.prefix}${args[0]})`);
+            return true;
+        }
+
+        sendPlayerMessage(player, `${cmdData.helpMenu}`);
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Produces a random string
+ * @param length Length of the random string
+ * @param autoCharacters Enable premade characters for the string
+ * @param characters If autoCharacters is false, use these characters instead of premade ones
+ * @returns string
+ */
+export function random(length: number, autoCharacters: boolean, characters?: string) {
+    if (autoCharacters) {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwyxz0123456789_';
+        let result: string = ``;
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    }
+    else {
+        let result: string = ``;
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    }
+}
+
+
+
+export function gameruleSwitcheroo(gamerule: string, value: boolean) {
+    world.getDimension(`overworld`).runCommand(`gamerule ${gamerule} ${value}`);
+    system.runTimeout(() => {
+        world.getDimension(`overworld`).runCommand(`gamerule ${gamerule} ${!value}`);
+    }, 2);
+}
+
+
+/**
+ * Returns a random number between min and max
+ * @param min Minimum
+ * @param max Maximum
+ */
+export function randomN(min: number, max: number) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+
+/**
+ * @param playerName Player to get
+ */
+export function getPlayer(playerName: string) {
+    if (!playerName) return;
+    return world.getAllPlayers().find(player => player.name.toLowerCase().replace(/"|\\|@/g, "") === playerName.toLowerCase().replace(/"|\\|@/g, ""));
+}
+
+
+/**
+ * Gets a player's score
+ * @param player Player to get the score from
+ * @param objective Which objective to get the player's score from
+ * @returns
+ */
+export function getScore(player: Player, objective: string) {
+    try {
+        return world.scoreboard.getObjective(objective)?.getScore(player.scoreboardIdentity);
+    } catch { }
+    return undefined;
+}
+
+
+/**
+ * Sets a player's score
+ * @param player Player to set the score from
+ * @param objective Which objective to set the player's score from
+ * @param score What score the player should be set to
+ * @returns
+ */
+export function setScore(player: Player, objective: string, score: number) {
+    if (!player.scoreboardIdentity) return player.runCommand(`scoreboard players set @s ${objective} ${score}`);
+    return world.scoreboard.getObjective(objective).setScore(player.scoreboardIdentity, score);
+}
+
+
+/**
+ * Adds to a player's score
+ * @param player Player to add the score from
+ * @param objective Which objective to add the player's score from
+ * @param score How much score to add to the player
+ * @returns
+ */
+export function addScore(player: Player, objective: string, amount: number) {
+    return world.scoreboard.getObjective(objective).addScore(player.scoreboardIdentity, amount);
+}
+
+export function sleep(ticks: number): Promise<void> {
+    return new Promise(resolve => {
+        system.runTimeout(() => {
+            resolve();
+        }, ticks);
+    });
+}

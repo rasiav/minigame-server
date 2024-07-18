@@ -1,0 +1,63 @@
+{
+	"format_version": 2,
+	"metadata": {
+		"authors": [
+			"GamerDos"
+		],
+		"generated_with": {
+			"bridge": [
+				"2.7.28"
+			],
+			"dash": [
+				"0.11.4"
+			]
+		}
+	},
+	"header": {
+		"name": "Anti Combat Log v1.2.3-beta.2",
+		"min_engine_version": [
+			1,
+			20,
+			0
+		],
+		"uuid": "ff727ff0-2e5e-4e10-928d-3d65444821b7",
+		"description": "§bbrrruurrnigggaggaggagagagggggagagagg nigiggiigigigninginnggagAnti Combat Log!\n§1Made by §fGamerDos§1 on §fYou§cTube!\n§2I will only upload this addon to mcpedl.com, not the Google Play Store, not any other site",
+		"version": [
+			3,
+			0,
+			0
+		]
+	},
+	"modules": [
+		{
+			"type": "data",
+			"uuid": "80fa5e7c-6a77-43de-a586-78a9ff4ade4c",
+			"version": [
+				3,
+				0,
+				0
+			]
+		},
+		{
+			"type": "script",
+			"language": "javascript",
+			"entry": "scripts/combatlog.js",
+			"uuid": "cc044a35-9213-40d0-ab6f-43cc724b21aa",
+			"version": [
+				3,
+				0,
+				0
+			]
+		}
+	],
+	"dependencies": [
+		{
+			"module_name": "@minecraft/server",
+			"version": "1.12.0-beta"
+		},
+		{
+			"module_name": "@minecraft/server-ui",
+			"version": "1.2.0-beta"
+		}
+	]
+}

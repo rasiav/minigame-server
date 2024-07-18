@@ -1,0 +1,63 @@
+import { world, Player } from "@minecraft/server";
+import { Command, commands } from "../../stuff/handler";
+import { config } from "../../stuff/config";
+import { helpMoreInfo, sendPlayerMessage } from "../../stuff/commonUtils";
+
+new Command({
+    name: `help`,
+    aliases: [`h`],
+    helpMenu: `none`,
+    code({ player, args }) {
+        if (helpMoreInfo(player, args) === true) return;
+
+        const cmdData = commands.find(c => c.name.toLowerCase() === args[0]?.toLowerCase() || c.aliases?.includes(args[0]?.toLowerCase()));
+        if (cmdData) {
+            if (cmdData.altHelpMenu && !(player.isOp() || player.hasTag(`lifesteal-opped`))) {
+                sendPlayerMessage(player, `${cmdData.altHelpMenu}`);
+                return;
+            }
+            if (!cmdData.helpMenu) return sendPlayerMessage(player, `§cThere is no available help menu, this is a bug and should be reported to GamerDos. He probably forgot to put a help menu because hes stupid lmao (Discord: https://dsc.gg/gamerdos). Anyway heres a placeholder help menu:
+
+Command Name: ${cmdData.name}
+Staff Only: ${cmdData.staffOnly}
+Command aliases: [
+    ${cmdData.aliases?.join(`\n    `) ?? `none`}
+]`);
+            if (cmdData.helpMenu === `none`) {
+                sendPlayerMessage(player, `§cNo help menu available for this command! (${config.prefix}${args[0]})`);
+                return;
+            }
+            sendPlayerMessage(player, `${cmdData.helpMenu}`);
+            return;
+        }
+
+        sendPlayerMessage(player, `§c----------------------------
+§c§lACL Help Page§r
+§f§lCommand Prefix: §c${config.prefix}
+§r§c----------------------------
+
+§6Normie Commands --
+
+§e- §lrelievesp §r§g| Removes your spawn protection if you have just been killed by a player
+§e- §lcheck §r§g| Check if you are combat logged
+
+§r§sStaff Commands --§r
+${player.hasTag(config.staffTag) || player.isOp() ?
+                `
+§9§lcombattime <amount> §r§u| Set the combat time
+§9§lmobtriggerlog <true/false> §r§u| Whether or not mobs combat tag you
+§9§lspawnkilltime <amount/disable> §r§u| Set the spawn kill time
+§9§ldisabletpcombat <true/false> §r§u| Whether or not to disable ender pearls in combat
+§9§litemdroplog <true/false> §r§u| Toggle whether items drop immediately after a combat tagged player leaves, or after they join back
+§9§ldisableelytracombat <true/false> §r§u| Toggle whether elytras are allowed in combat or not
+§9§lsafezone <add/remove/list> <coord1> <coord2> §r§u| Add, remove, or list safezones
+§9§litemblacklist <itemid> §r§u| Add an item to the item black list
+
+§r§f§lDo ${config.prefix}help <commandName> for information on that command!`
+                :
+                `§cYou do not have permission to see this! Do /tag @s add ${config.staffTag} to get permission
+
+§r§f§lDo ${config.prefix}help <commandName> for information on that command!`}`
+        );
+    },
+});

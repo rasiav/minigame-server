@@ -1,0 +1,76 @@
+import { world, Player } from "@minecraft/server";
+import { Command } from "../../../stuff/handler";
+import { clSettings } from "../../../combatlog";
+import { config } from "../../../stuff/config";
+import { sendPlayerMessage } from "../../../stuff/commonUtils";
+
+new Command({
+    name: `spawnkilltime`,
+    aliases: [`sptime`],
+    helpMenu: `§e§lAntiCL Help Page -- spawnkilltime§r§g
+> Set the spawn kill protection time (Amount of time before players can damage killed players again)
+
+> Usage: ${config.prefix}spawnkilltime <amount/disable>
+
+> Aliases: [
+    ${config.prefix}sptime
+]
+
+> Examples: [
+    ${config.prefix}spawnkilltime 30
+    ${config.prefix}spawnkilltime 1minute
+    ${config.prefix}sptime 1min
+    ${config.prefix}sptime 1m
+    ${config.prefix}sptime disable
+]`,
+    code({ player, args }) {
+        if (args[0] == `default`) {
+            clSettings.set(`spawnkilltime`, 30);
+            args[0] = `30`;
+            sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully set spawnkill time to §f${+args[0]}s (${(+args[0] / 60).toFixed(2)} ${+args[0] / 60 == 1 ? `minute` : `minutes`})`);
+            return;
+        }
+        if (args[0] == `disable`) {
+            clSettings.set(`spawnkilltime`, 0);
+            sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully disabled spawnkill protection`);
+            return;
+        }
+        if (!args[0]) return sendPlayerMessage(player, `§aSpawnkilltime is set to ${clSettings.get(`spawnkilltime`)}`);
+        if (args[0].endsWith(`m`) || args[0].endsWith(`minute`) || args[0].endsWith(`min`)) args[0] = `${+args[0].replace(/[^\d\W]/g, ``) * 60}`;
+        if (isNaN(+args[0])) return sendPlayerMessage(player, `§8[§cX§8] §cThat isn't a number!`);
+        clSettings.set(`spawnkilltime`, Math.floor(+args[0]));
+        if (+args[0] < 3 || +args[0] > 600) return sendPlayerMessage(player, `§8[§cX§8] §cYou can only set the spawnkill time to seconds between 3 and 600!`);
+        sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully set spawnkill time to §f${Math.floor(+args[0])}s §7(${timeStamp(+args[0] * 1000)})`);
+    }
+});
+
+/**
+ * stole this from papi (hi papi!!)
+ * @name timeStamp
+ * @param {number} time The milliseconds number which needs to be formatted.
+ * @example timeStamp(20000);
+ * @remarks Formats the milliseconds to a week, day, hour, minute, second format.
+ * @returns {string} Returns the formatted timestamp string.
+ */
+const timeStamp = (time: number): string => {
+    let seconds: number = Math.floor(time / 1000);
+    let minutes: number = Math.floor(seconds / 60);
+    let hours: number = Math.floor(minutes / 60);
+    let days: number = Math.floor(hours / 24);
+    const weeks: number = Math.floor(days / 7);
+
+    seconds %= 60;
+    minutes %= 60;
+    hours %= 24;
+    days %= 7;
+
+    const duration: string[] = [];
+    if (weeks) duration.push(`${weeks} week${weeks > 1 ? `s` : ``}`);
+    if (days) duration.push(`${days} day${days > 1 ? `s` : ``}`);
+    if (hours) duration.push(`${hours} hour${hours > 1 ? `s` : ``}`);
+    if (minutes) duration.push(`${minutes} minute${minutes > 1 ? `s` : ``}`);
+    if (seconds) duration.push(`${seconds} second${seconds > 1 ? `s` : ``}`);
+
+    if (duration.length) return duration.join(`, `);
+    else return `0 seconds`;
+};

@@ -1,0 +1,68 @@
+import { Player, system, world } from "@minecraft/server";
+import { config } from "./config";
+import { sendAllMessage, sendPlayerMessage } from "./commonUtils";
+
+export interface commandData {
+    /**
+     * Name of the command
+     */
+    name: string;
+    /**
+     * Aliases for the command
+     */
+    aliases?: string[];
+    /**
+     * Whether its staff only or not
+     */
+    staffOnly?: boolean;
+    /**
+     * Help menu
+    */
+    helpMenu?: string;
+    /**
+     * Help menu
+    */
+    altHelpMenu?: string;
+    /**
+     * Code for the command
+     */
+    code: (data: { player: Player, args: string[], cmdData: commandData; }) => void;
+};
+
+/**
+ * Make a new command
+ */
+export class Command {
+    static readonly commands: commandData[] = [];
+    constructor(commandInfo: commandData) {
+        if (!Command.commands.includes(commandInfo)) Command.commands.push(commandInfo);
+    }
+}
+
+export const commands: commandData[] = Command.commands;
+
+world.beforeEvents.chatSend.subscribe(data => {
+    if (data.message.startsWith(config.prefix)) {
+        data.cancel = true;
+        const args = data.message.slice(config.prefix.length).toLowerCase().split(/\s+/g);
+        const command = args.shift();
+
+        const cmdData = commands.find(c => c.name.toLowerCase() === command.toLowerCase() || c.aliases?.includes(command.toLowerCase()));
+        if (!cmdData) return sendPlayerMessage(data.sender, `§cUnknown command: ${command}. Do ${config.prefix}help for a list of commands`);
+        if (cmdData.staffOnly && !data.sender.hasTag(config.staffTag) && !data.sender.isOp()) return sendPlayerMessage(data.sender, `§cYou do not have permission to run this command!`);
+
+        const player = data.sender;
+
+        if (!cmdData.helpMenu) cmdData.helpMenu = `§cThere is no available help menu, this is a bug and should be reported to GamerDos. He probably forgot to put a help menu because hes stupid lmao (Discord: https://dsc.gg/gamerdos). Anyway heres a placeholder help menu:
+
+Command Name: ${cmdData.name}
+Staff Only: ${cmdData.staffOnly}
+Command aliases: [
+    ${cmdData.aliases?.join(`\n    `) ?? `none`}
+]`;
+
+        system.run(() => {
+            cmdData.code({ player, args, cmdData: cmdData });
+        });
+    }
+});

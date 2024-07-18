@@ -1,0 +1,20 @@
+import { world, Player, system } from "@minecraft/server";
+import { Command } from "../../stuff/handler";
+import { config } from "../../stuff/config";
+import { getScore, sendPlayerMessage } from "../../stuff/commonUtils";
+
+new Command({
+    name: `check`,
+    helpMenu: `§e§lAntiCL Help Page -- check§r§g
+> Check if you are combat logged
+
+> Usage: ${config.prefix}check
+
+> Examples: [
+    ${config.prefix}check
+]`,
+    code({ player, args }) {
+        let combatscore = getScore(player, `combatlog`);
+        sendPlayerMessage(player, `§6You are §4${player.hasTag(`cl-combatlogged`) ? `in combat for §3${(combatscore / 20) >= 60 ? `${Math.floor(combatscore / 20 / 60)} ${Math.floor(combatscore / 20 / 60) == 1 ? `minute` : `minutes`} ${Math.floor(combatscore / 20 - Math.floor(combatscore / 20 / 60) * 60)}` : `${Math.floor(combatscore / 20)}`}s` : `not in combat`}`);
+    }
+});

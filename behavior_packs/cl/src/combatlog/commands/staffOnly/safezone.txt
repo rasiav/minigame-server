@@ -1,0 +1,72 @@
+import { Player } from "@minecraft/server";
+import { clSettings, safezones } from "../../../combatlog";
+import { config } from "../../../stuff/config";
+import { sendPlayerMessage, sendAllMessage } from "../../../stuff/commonUtils";
+import { Command } from "../../../stuff/handler";
+
+new Command({
+    name: `safezone`,
+    staffOnly: true,
+    helpMenu: `§e§lAntiCL Help Page -- safezone§r§g
+> Add or remove a safezone
+
+> Usage: ${config.prefix}safezone <add/remove/list/protadd> <coord1> <coord2>
+
+> Args: [
+    add - Add a pvp safezone
+    protadd - Add a block protection safezone
+    remove - Remove a safezone
+    list - Remove a safezone
+]
+
+> Examples: [
+    ${config.prefix}safezone add -5 5 5 3 -3 5
+    ${config.prefix}safezone protadd -5 5 5 3 -3 5
+    ${config.prefix}safezone remove -5 5 5 3 -3 5
+    ${config.prefix}safezone list
+]`,
+    code({ player, args }) {
+        if (!args[0]) return sendPlayerMessage(player, `§cNo argument detected (add/remove/list/protadd)`);
+        if (args.length < 7 && args[0] !== `list`) return sendPlayerMessage(player, `§cIncomplete safezone coords`);
+        const coords = `${args[1]}--${args[2]}--${args[3]}--${args[4]}--${args[5]}--${args[6]}`;
+        switch (args.shift()) {
+            default:
+                if (!args[0]) return sendPlayerMessage(player, `§cWrong argument detected (add/remove/list/protadd)`);
+                break;
+            case `add`:
+                if (safezones.get(`${coords}`) && safezones.get(`${coords}`) === `true`) {
+                    safezones.set(`${coords}`, `both`);
+                    sendPlayerMessage(player, `§aAdded a pvp safezone between §f${args[0]} ${args[1]} ${args[2]}§a and §f${args[3]} ${args[4]} ${args[5]}`);
+                    return;
+                }
+                if (coords.split(`--`).some(x => isNaN(+x) || x.length === 0)) return sendPlayerMessage(player, `§cInvalid coords!`);
+                safezones.set(`${coords}`, `false`);
+                sendPlayerMessage(player, `§aAdded a pvp safezone between §f${args[0]} ${args[1]} ${args[2]}§a and §f${args[3]} ${args[4]} ${args[5]}`);
+                break;
+            case `protadd`:
+                if (safezones.get(`${coords}`) && safezones.get(`${coords}`) === `false`) {
+                    safezones.set(`${coords}`, `both`);
+                    sendPlayerMessage(player, `§aAdded a block safezone between §f${args[0]} ${args[1]} ${args[2]}§a and §f${args[3]} ${args[4]} ${args[5]}`);
+                    return;
+                }
+                if (coords.split(`--`).some(x => isNaN(+x) || x.length === 0)) return sendPlayerMessage(player, `§cInvalid coords!`);
+                safezones.set(`${coords}`, `true`);
+                sendPlayerMessage(player, `§aAdded a block safezone between §f${args[0]} ${args[1]} ${args[2]}§a and §f${args[3]} ${args[4]} ${args[5]}`);
+                break;
+            case `remove`:
+                if (safezones.has(`${coords}`)) safezones.delete(`${coords}`);
+                else return sendPlayerMessage(player, `§cNo safezone detected between those coords!`);
+                sendPlayerMessage(player, `§aDeleted the safezone/s between §f${args[0]} ${args[1]} ${args[2]}§a and §f${args[3]} ${args[4]} ${args[5]}`);
+                break;
+            case `list`:
+                sendPlayerMessage(player, `§eSafezones:\n${Array.from(safezones.entries()).map(x => `§6${x[0].split(`--`).join(` `)} BlockProt: ${x[1]}\n`)}`);
+                break;
+        }
+    }
+});
+
+function numbersBetween(start: number, end: number) {
+    const count = Math.abs(end - start) - 1;
+    const increment = start < end ? 1 : -1;
+    return Array.from({ length: count }, (_, index) => start + increment * (index + 1));
+}

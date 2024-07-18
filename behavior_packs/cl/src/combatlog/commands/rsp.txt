@@ -1,0 +1,31 @@
+import { world, Player, system } from "@minecraft/server";
+import { Command } from "../../stuff/handler";
+import { config } from "../../stuff/config";
+import { sendPlayerMessage } from "../../stuff/commonUtils";
+
+new Command({
+    name: `relievesp`,
+    aliases: [`rsp`, `relievespawnprotection`, `relievespawnprot`, `rsprot`],
+    helpMenu: `§e§lAntiCL Help Page -- relievesp§r§g
+> Remove spawn protection if you have it
+
+> Usage: ${config.prefix}relievesp
+
+> Aliases: [
+    ${config.prefix}rsp
+    ${config.prefix}relievespawnprotection
+    ${config.prefix}relievespawnprot
+    ${config.prefix}rsprot
+]
+
+> Examples: [
+    ${config.prefix}rsp
+    ${config.prefix}relievesp
+]`,
+    code({ player, args }) {
+        if (!player.hasTag(`cl-spawnkill`)) return sendPlayerMessage(player, `§8[§cX§8] §cYou don't have spawn protection!`);
+        player.removeTag(`cl-spawnkill`);
+        sendPlayerMessage(player, `§cYou no longer have spawn protection!`);
+        player.onScreenDisplay.setActionBar(`§3You are no longer spawn protected!`);
+    },
+});

@@ -1,0 +1,26 @@
+const esbuild = require("esbuild");
+
+const external = [
+    "@minecraft/server",
+    "@minecraft/server-ui",
+    "@minecraft/server-admin",
+    "@minecraft/server-gametest",
+    "@minecraft/server-net",
+    "@minecraft/server-common",
+    "@minecraft/server-editor",
+    "@minecraft/debug-utilities",
+];
+
+async function watch() {
+    let ctx = await esbuild.context({
+        entryPoints: ["src/combatlog.ts"],
+        minify: false,
+        outfile: "scripts/combatlog.js",
+        bundle: true,
+        format: `esm`,
+        external
+    });
+    await ctx.watch()
+    console.log('Watching');
+}
+watch();

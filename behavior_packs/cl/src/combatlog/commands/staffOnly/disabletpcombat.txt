@@ -1,0 +1,33 @@
+import { world, Player } from "@minecraft/server";
+import { Command } from "../../../stuff/handler";
+import { clSettings } from "../../../combatlog";
+import { config } from "../../../stuff/config";
+import { sendPlayerMessage } from "../../../stuff/commonUtils";
+
+new Command({
+    name: `disabletpcombat`,
+    aliases: [`disabletp`, `disabletpcomb`, `dtpc`],
+    staffOnly: true,
+    helpMenu: `§e§lAntiCL Help Page -- disabletpcombat§r§g
+> Whether or not to disable ender pearls during combat
+
+> Usage: ${config.prefix}disabletpcombat <true/false>
+
+> Aliases: [
+    ${config.prefix}disabletp
+    ${config.prefix}disabletpcomb
+    ${config.prefix}dtpc
+
+> Examples: [
+    ${config.prefix}disabletpcombat true
+    ${config.prefix}disabletp true
+    ${config.prefix}disabletpcomb false
+    ${config.prefix}dtpc false
+]`,
+    code({ player, args }) {
+        if (!args[0]) return sendPlayerMessage(player, `§aDisabletpincombat is set to ${clSettings.get(`disabletpcombat`)}`);
+        if (![`true`, `false`].includes(args[0].toLowerCase())) return sendPlayerMessage(player, `§8[§cX§8] §cError, must be true || false`);
+        clSettings.set(`disabletpcombat`, args[0].toLowerCase());
+        sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully set DisableTPcombat to §f${args[0]}`);
+    }
+});

@@ -1,0 +1,246 @@
+/*!
+ * Creator & Developer of this file: PAPISOP
+ * Discord Username of PAPISOP: papisop (https://discord.com/users/457793443465527306)
+ *
+ * This file, created by PAPISOP, is licensed under CC BY-NC-ND 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by-nc-nd/4.0/
+ */
+
+import { world } from "@minecraft/server";
+
+/**
+ * @name objArrSignature
+ * @remarks
+ * This is used to add a signature to an object or an array value which is set in the world's dynamic properties to prevent some exploits, and don't worry when you try to get the value, the signature will not be included in the value.
+ * 
+ * You may change the signature to your desired signature.
+ * 
+ * NOTE: The signature should not be changed after the database is already being used in a world.
+ */
+const objArrSignature: string = "gmson";
+
+/**
+ * @name Database
+ * @remarks A database for storing data in a world using dynamic properties.
+ */
+export class Database {
+    private readonly dynamicProperty: string;
+    private readonly localState: Map<string, any | object | any[]> = new Map<string, any | object | any[]>();
+
+    /**
+     * @name setValue
+     * @param {string} key The key string in which the value will be set in the local state.
+     * @param {any} value The value string, number, or boolean from the dynamic property which will be set in the local state.
+     * @remarks Sets the value with its key in the local state.
+     */
+    private setValue(key: string, value: any): void {
+        if (typeof value === "string") {
+            const parsedValue: string | object | any[] = this.parseValue(value);
+
+            this.localState.set(key, parsedValue);
+        }
+        else this.localState.set(key, value);
+    }
+
+    /**
+     * @name parseValue
+     * @param {string} value The string value which needs to be checks if it is an array or an object.
+     * @remarks Parses the stringify array or object value to an array or an object if it has the signature.
+     * @returns {string | object | any[]} Returns an object or an array if the value is actually stringify object or array, and has signature. Otherwise returns the string value.
+     */
+    private parseValue(value: string): string | object | any[] {
+        /**
+         * It will parse the value to see if it is an array or an object, and if it is then it will check if the
+         * signature exists or not in the array or object, if it doesn't then string value will be returned, and if it does
+         * then array or object value respectively will be returned
+         * 
+         * If it is not a stringify array or object, then the string value will be returned
+         */
+        try {
+            const parsedValue: any[] | Record<any, any> = JSON.parse(value);
+
+            if (Array.isArray(parsedValue)) {
+                const lastElement: any | undefined = parsedValue.pop();
+
+                if (lastElement && lastElement.startsWith("papiDatabase:") && lastElement.endsWith(objArrSignature)) return parsedValue;
+                else return value;
+            }
+            else if (typeof parsedValue === "object" && parsedValue.papiDatabase === objArrSignature) {
+                delete parsedValue.papiDatabase;
+
+                return parsedValue;
+            }
+            else return value;
+        }
+        catch {
+            return value;
+        }
+    }
+
+    /**
+     * @name constructor
+     * @param {string} id An identifier string for the database.
+     */
+    constructor(id: string) {
+        this.dynamicProperty = id;
+    }
+
+    /**
+    * @name size
+    * @returns {number} Returns the number of keys in the database.
+    */
+    get size(): number {
+        const allDynamicPropertyKeys: string[] = world.getDynamicPropertyIds().filter(property => property.startsWith(`${this.dynamicProperty}:`));
+
+        return allDynamicPropertyKeys.length;
+    }
+
+    /**
+     * @name clear
+     * @remarks Clears every keys and its value in the database.
+     */
+    clear(): void {
+        const allDynamicPropertyKeys: string[] = world.getDynamicPropertyIds().filter(property => property.startsWith(`${this.dynamicProperty}:`));
+
+        for (const key of allDynamicPropertyKeys) world.setDynamicProperty(key, undefined);
+        this.localState.clear();
+    }
+
+    /**
+     * @name delete
+     * @param {string} key The database key string which needs to be deleted.
+     * @remarks Deletes the key from the database.
+     */
+    delete(key: string): void {
+        world.setDynamicProperty(`${this.dynamicProperty}:${key}`, undefined);
+        this.localState.delete(key);
+    }
+
+    /**
+     * @name get
+     * @param {string} key The key string of the value to return.
+     * @returns {any | object | any[] | undefined} Returns the value string, number, boolean, object, or array associated with the specified key. If no value is associated with the specified key, undefined is returned.
+     */
+    get(key: string): any | object | any[] | undefined {
+        // If the key cannot be found in the local state, then it will cache the value and set it in local state if the key exists in dynamic properties
+        if (!this.localState.has(key)) {
+            const value: any | undefined = world.getDynamicProperty(`${this.dynamicProperty}:${key}`) as any | undefined;
+
+            if (value !== undefined) this.setValue(key, value);
+            else return undefined;
+        }
+
+        return this.localState.get(key);
+    }
+
+    /**
+     * @name has
+     * @param {string} key The key string which needs to be check if it exists in the database or not.
+     * @returns {boolean} Returns true if the key is found in the database, otherwise returns false.
+     */
+    has(key: string): boolean {
+        if (this.localState.has(key)) return true;
+        else return world.getDynamicProperty(`${this.dynamicProperty}:${key}`) !== undefined;
+    }
+
+    /**
+     * @name set
+     * @param {string} key The key string in which the new value will get set.
+     * @param {any | object | any[]} value The value string, number, boolean, object, or array which will be set in the key.
+     * @remarks The value provided which will get set in the key provided in the database.
+     * @throws Throws RangeError if the string value, or stringify array or object is more than 32767 characters.
+     */
+    set(key: string, value: any | object | any[]): void {
+        if (this.localState.get(key) === value) return;
+
+        if (typeof value === "string" && value.length > 32767) throw new RangeError(`Database::set only accepts a string value less than 32767 characters.`);
+
+        // Sets the value in the database
+        if (typeof value !== "object") world.setDynamicProperty(`${this.dynamicProperty}:${key}`, value);
+        else if (Array.isArray(value)) {
+            const arrSignatureId: string = `papiDatabase:${objArrSignature}`;
+
+            const newValue: any[] = [...value, arrSignatureId];
+
+            const stringify: string = JSON.stringify(newValue);
+            if (stringify.length > 32767) throw new RangeError(`Database::set only accepts a stringify array value less than ${32767 - (5 + arrSignatureId.length)} characters.`);
+
+            world.setDynamicProperty(`${this.dynamicProperty}:${key}`, stringify);
+        }
+        else {
+            const newValue: object = {
+                ...value,
+                ["papiDatabase"]: objArrSignature
+            };
+
+            const stringify: string = JSON.stringify(newValue);
+            if (stringify.length > 32767) throw new RangeError(`Database::set only accepts a stringify object value less than ${32767 - (16 + objArrSignature.length)} characters.`);
+
+            world.setDynamicProperty(`${this.dynamicProperty}:${key}`, stringify);
+        }
+        this.localState.set(key, value);
+    }
+
+    /**
+     * @name entries
+     * @returns {IterableIterator<[string, any | object | any[]]>} Returns an iterable of keys string array, and values string, number, boolean, array, or object array pairs for every keys in the database.
+     */
+    *entries(): IterableIterator<[string, any | object | any[]]> {
+        const dynamicPropertyId: string = `${this.dynamicProperty}:`;
+
+        const allDynamicPropertyKeys: string[] = world.getDynamicPropertyIds().filter(property => property.startsWith(dynamicPropertyId));
+
+        for (const key of allDynamicPropertyKeys) {
+            const slicedKey: string = key.slice(dynamicPropertyId.length);
+
+            let value: any | object | any[];
+            if (this.localState.has(slicedKey)) value = this.localState.get(slicedKey) as any | object | any[];
+            else {
+                value = world.getDynamicProperty(key) as any;
+
+                if (typeof value === "string") value = this.parseValue(value);
+            }
+
+            yield [slicedKey, value];
+        }
+    }
+
+    /**
+     * @name keys
+     * @returns {IterableIterator<string>} Returns an iterable of keys string in the database.
+     */
+    *keys(): IterableIterator<string> {
+        const dynamicPropertyId: string = `${this.dynamicProperty}:`;
+
+        const allDynamicPropertyKeys: string[] = world.getDynamicPropertyIds().filter(property => property.startsWith(dynamicPropertyId));
+
+        for (const key of allDynamicPropertyKeys) {
+            const slicedKey: string = key.slice(dynamicPropertyId.length);
+
+            yield slicedKey;
+        }
+    }
+
+    /**
+     * @name values
+     * @returns {IterableIterator<any | object | any[]>} Returns an iterable of values string, number, boolean, object, or array in the database.
+     */
+    *values(): IterableIterator<any | object | any[]> {
+        const dynamicPropertyId: string = `${this.dynamicProperty}:`;
+
+        const allDynamicPropertyKeys: string[] = world.getDynamicPropertyIds().filter(property => property.startsWith(dynamicPropertyId));
+
+        for (const key of allDynamicPropertyKeys) {
+            const slicedKey: string = key.slice(dynamicPropertyId.length);
+
+            let value: any | object | any[];
+            if (this.localState.has(slicedKey)) value = this.localState.get(slicedKey) as any | object | any[];
+            else {
+                value = world.getDynamicProperty(key) as any;
+
+                if (typeof value === "string") value = this.parseValue(value);
+            }
+
+            yield value;
+        }
+    }
+}

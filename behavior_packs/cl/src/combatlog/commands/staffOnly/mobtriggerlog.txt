@@ -1,0 +1,31 @@
+import { world, Player } from "@minecraft/server";
+import { Command } from "../../../stuff/handler";
+import { config } from "../../../stuff/config";
+import { sendPlayerMessage } from "../../../stuff/commonUtils";
+import { clSettings } from "../../../combatlog";
+
+new Command({
+    name: `mobtriggerlog`,
+    aliases: [`moblog`, `mobtriggerclog`, `mobclog`],
+    staffOnly: true,
+    helpMenu: `§e§lAntiCL Help Page -- mobtriggerlog§r§g
+> Whether or not mobs trigger combat
+
+> Usage: ${config.prefix}mobtriggerlog
+
+> Aliases: [
+    ${config.prefix}moblog
+    ${config.prefix}mobtriggerclog
+    ${config.prefix}mobclog
+
+> Examples: [
+    ${config.prefix}mobtriggerlog true
+    ${config.prefix}moblog false
+]`,
+    code({ player, args }) {
+        if (!args[0]) return sendPlayerMessage(player, `§aMobtriggerlog is set to ${clSettings.get(`mobtriggerlog`)}`);
+        if (![`true`, `false`].includes(args[0].toLowerCase())) return sendPlayerMessage(player, `§8[§cX§8] §cError, must be true || false`);
+        clSettings.set(`mobtriggerlog`, args[0].toLowerCase());
+        sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully set mobtriggerlog to §f${args[0]}`);
+    }
+});

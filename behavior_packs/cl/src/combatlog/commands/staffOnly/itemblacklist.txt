@@ -1,0 +1,39 @@
+import { world, Player, ItemStack } from "@minecraft/server";
+import { Command } from "../../../stuff/handler";
+import { clSettings, iblacklist } from "../../../combatlog";
+import { config } from "../../../stuff/config";
+import { sendPlayerMessage } from "../../../stuff/commonUtils";
+
+new Command({
+    name: `itemblacklist`,
+    aliases: [`iblacklist`],
+    staffOnly: true,
+    helpMenu: `§e§lAntiCL Help Page -- iblacklist§r§g
+> Blacklist certain items
+
+> Usage: ${config.prefix}iblacklist <itemid>
+
+> Aliases: [
+    ${config.prefix}iblacklist
+    ${config.prefix}itemblacklist
+
+> Examples: [
+    ${config.prefix}iblacklist minecraft:ender_pearl
+    ${config.prefix}itemblacklist
+]`,
+    code({ player, args }) {
+        if (!args[0]) return sendPlayerMessage(player, `§eBlacklisted items:\n§6${Array.from(iblacklist.keys()).join(`\n`)}`);
+        if (iblacklist.has(`${args[0]}`)) {
+            iblacklist.delete(`${args[0].toLowerCase()}`);
+            sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully removed ${args[0]} from item blacklist`);
+            return;
+        }
+
+        // Try Catch is the only option i can think of rn :((
+        try {
+            new ItemStack(`${args[0]}`);
+        } catch { return sendPlayerMessage(player, `§8[§cX§8] §cItem doesn't exist, make sure you entered the right ID`); }
+        iblacklist.set(`${args[0].toLowerCase()}`, args[0].toLowerCase());
+        sendPlayerMessage(player, `§8[§a/§8] §aSuccessfully added ${args[0]} to item blacklist`);
+    }
+});

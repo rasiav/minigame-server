@@ -1,0 +1,453 @@
+// Addon by @GamerDos on Youtube
+const clVersion = `1.2.3-release`;
+
+import { world, Player, EntityHealthComponent, EntityRaycastOptions, system, EntityInventoryComponent, ItemStack, Vector3, Entity, BlockInventoryComponent, EntityEquippableComponent, EquipmentSlot, ItemLockMode, ItemDurabilityComponent, ScoreboardIdentityType, GameMode } from '@minecraft/server';
+import { ActionFormData } from '@minecraft/server-ui';
+import { config } from './stuff/config';
+import { addScore, getScore, sendAllMessage, sendPlayerMessage } from "./stuff/commonUtils";
+import { Command, commands } from './stuff/handler';
+import { Database } from './database';
+import { Vector2Builder, Vector2Utils, Vector3Builder, Vector3Utils } from "@minecraft/math";
+import { MinecraftBlockTypes } from "@minecraft/vanilla-data";
+
+// Command imports
+import './combatlog/commands/check';
+import './combatlog/commands/rsp';
+import './combatlog/commands/help';
+
+import './combatlog/commands/staffOnly/bantime';
+import './combatlog/commands/staffOnly/combattime';
+import './combatlog/commands/staffOnly/disableflycombat';
+import './combatlog/commands/staffOnly/disabletpcombat';
+import './combatlog/commands/staffOnly/itemblacklist';
+import './combatlog/commands/staffOnly/itemdroplog';
+import './combatlog/commands/staffOnly/mobtriggerlog';
+import './combatlog/commands/staffOnly/safezone';
+import './combatlog/commands/staffOnly/sptime';
+
+export const clSettings = new Database(`clsettings`);
+export const safezones = new Database(`clsafezones`);
+export const iblacklist = new Database(`cliblacklist`);
+export const bannedplayers = new Database(`bannedplayers`);
+
+const defaultSettings = {
+    combattime: `30`,
+    spawnkilltime: `30`,
+    bantime: `0`,
+    mobtriggerlog: `false`,
+    disabletpcombat: `false`,
+    itemdroplog: `false`,
+    disableelytracombat: `false`
+};
+
+for (const key in defaultSettings) {
+    if (!clSettings.has(key)) {
+        clSettings.set(key, defaultSettings[key as keyof typeof defaultSettings]);
+    }
+}
+
+type InventoryArr = {
+    playerName: string;
+    dimension: string;
+    location: Vector3;
+    logged?: boolean;
+    player: Player;
+    items: ItemStack[];
+};
+
+const invMap = new Map<string, InventoryArr>();
+
+function savePlayerData(player: Player): void {
+    const { name: playerName, location, dimension } = player;
+    const logged = player.getTags().includes(`cl-combatlogged`);
+
+    const items: ItemStack[] = [];
+    const equipmentInventory = player.getComponent(`equippable`) as EntityEquippableComponent;
+
+    const equipmentSlots: EquipmentSlot[] = [
+        EquipmentSlot.Head,
+        EquipmentSlot.Chest,
+        EquipmentSlot.Legs,
+        EquipmentSlot.Feet,
+        EquipmentSlot.Offhand,
+    ];
+
+    for (const slot of equipmentSlots) {
+        const item = equipmentInventory.getEquipment(slot);
+        if (item) items.push(item);
+    }
+
+    const obj: InventoryArr = { playerName, location, dimension: dimension.id, logged, player, items };
+    invMap.set(player.name, obj);
+}
+
+const inventoryMap = new Map<string, ItemStack[]>();
+
+world.beforeEvents.playerLeave.subscribe(data => {
+    const player = data.player;
+    const playerName = player.name;
+    const inventory = (player.getComponent(`inventory`) as EntityInventoryComponent).container;
+    const items: ItemStack[] = [];
+    const dimension = player.dimension.id;
+    const location = player.location;
+    const logged = player.hasTag(`cl-combatlogged`);
+    const playerFind = invMap.get(player.name);
+
+    if (+clSettings.get(`bantime`) !== 0) {
+        bannedplayers.set(`${player.id}`, `${Date.now() + +clSettings.get(`bantime`) * 1000}`);
+    }
+
+    for (let i = 0; i < inventory.size; i++) {
+        const item = inventory.getItem(i);
+        if (item) items.push(item);
+    }
+    inventoryMap.set(player.name, items);
+
+    system.run(() => {
+        const playerData = inventoryMap.get(playerName);
+
+        if (!playerData || logged === false || clSettings.get(`itemdroplog`) === `false`) return;
+
+        try {
+            world.getDimension(dimension).spawnItem(new ItemStack(`lifesteal:heart`), location);
+        } catch { }
+
+        for (const item of playerData) {
+            world.getDimension(dimension).spawnItem(item, location);
+        }
+        for (const item of playerFind.items) {
+            world.getDimension(dimension).spawnItem(item, location);
+        }
+        inventoryMap.delete(playerName);
+    });
+});
+
+system.runInterval(() => {
+    for (const player of world.getAllPlayers()) {
+        const inventory = player.getComponent(`inventory`).container;
+        const plrData = invMap.get(player.name);
+        if (!plrData) {
+            savePlayerData(player);
+            continue;
+        }
+
+        if (plrData.logged && clSettings.get(`disabletpcombat`) === `true`) {
+            if (Vector3Utils.distance(plrData.location, player.location) > 40) {
+                player.teleport(plrData.location, { dimension: player.dimension });
+                sendPlayerMessage(player, `§4You are in combat and have been teleported back!`);
+            }
+        }
+
+        for (let i = 0; i < inventory.size; i++) {
+            const item = inventory.getItem(i);
+            if (item && Array.from(iblacklist.keys()).includes(item.typeId.replace(/^(.*?:)/, ``)) && !player.hasTag(config.staffTag)) {
+                inventory.setItem(i);
+                sendPlayerMessage(player, `§c${item.typeId} is blacklisted`);
+            }
+        }
+
+        savePlayerData(player);
+    }
+}, 10);
+
+world.afterEvents.entityDie.subscribe(data => {
+    let player = data.deadEntity as Player;
+    let damaging = data.damageSource.damagingEntity as Player;
+    try {
+        player.typeId;
+    } catch { return; }
+    if (player.typeId !== `minecraft:player`) return;
+    if (player.hasTag(`cl-combatlogged`)) player.runCommand(`title @s actionbar §3You are no longer in combat!`);
+    player.removeTag(`cl-combatlogged`);
+    if (!damaging || damaging.typeId !== `minecraft:player` || player == damaging) return;
+
+    system.runTimeout(() => {
+        player.addTag(`cl-spawnkill`);
+    }, 5);
+});
+
+world.afterEvents.entityHurt.subscribe(data => {
+    let player = data.hurtEntity as Player;
+    let damaging = data.damageSource.damagingEntity as Player;
+
+    let health = player.getComponent(`health`) as EntityHealthComponent;
+    if (!damaging) return;
+    if (player.hasTag(`cl-spawnkill`)) {
+        if (player !== damaging && damaging.typeId == `minecraft:player`) {
+            sendPlayerMessage(damaging, `§cYou cannot damage this player as they have just been killed!`);
+            for (let i = 0; i < 10; i++) {
+                player.applyKnockback(0, 0, 0, 0);
+                player.applyKnockback(0, 0, 0, 0);
+            }
+            health.setCurrentValue(Math.ceil(health.currentValue + data.damage));
+            damaging.addEffect(`weakness`, 40, { amplifier: 255, showParticles: false });
+
+            system.runTimeout(() => {
+                if (health.currentValue <= 0) {
+                    damaging.kill();
+                    sendAllMessage(`§cKilled ${damaging.name} for §6Spawn Killing`);
+                }
+            }, 1);
+        }
+        return;
+    }
+
+    if (damaging.hasTag(`cl-spawnkill`)) {
+        player.runCommand(`title @s actionbar §cYou no longer have spawn protection!`);
+        player.removeTag(`cl-spawnkill`);
+    }
+
+    if (player == damaging) return;
+
+    if (clSettings.get(`mobtriggerlog`) == `false` && (player.typeId !== `minecraft:player` || damaging.typeId !== `minecraft:player`)) return;
+    if (clSettings.get(`mobtriggerlog`) == `true`) {
+        if (!checkCL(player, damaging)) return;
+    }
+
+    let combatscore = +clSettings.get(`combattime`);
+    if (!player.hasTag(`cl-combatlogged`)) sendPlayerMessage(player, `§8[§6!§8] §4You are now combat logged! §6Do not leave or you will die §l(§3${formatTime(combatscore)}§6)`);
+
+    if (player.typeId == `minecraft:player`) {
+        player.addTag(`cl-combatlogged`);
+        player.runCommand(`scoreboard players set @s combatlog ${clSettings.get(`combattime`) * 20}`);
+    }
+    if (damaging.typeId == `minecraft:player`) {
+        damaging.addTag(`cl-combatlogged`);
+        damaging.runCommand(`scoreboard players set @s combatlog ${clSettings.get(`combattime`) * 20}`);
+    }
+});
+
+function checkCL(player: Player, damaging: Player): boolean {
+    const isPlayer = (entity: Player) => entity.typeId === `minecraft:player`;
+    const isMonster = (entity: Entity) => Array.from(entity.dimension.getEntities({ type: entity.typeId, families: [`monster`] })).length !== 0;
+
+    const bothPlayers = isPlayer(player) && isPlayer(damaging);
+    const oneMonster = isMonster(player) || isMonster(damaging);
+
+    return bothPlayers || oneMonster;
+}
+
+function formatTime(time: number) {
+    const minutes = Math.floor((time / 20) / 60);
+    const seconds = Math.floor(time / 20) - (minutes * 60);
+    return time / 20 >= 60 ? `${minutes ?? 0} minute${minutes === 1 ? `` : `s`} ${seconds ?? 0}s` : `${seconds ?? 0}s`;
+}
+
+function stopGliding(player: Player) {
+    player.applyDamage(1);
+    const gamemode = player.getGameMode();
+    player.setGameMode(GameMode.spectator);
+    player.setGameMode(gamemode);
+    sendPlayerMessage(player, `§4You are in combat and you cannot use your elytra!`);
+}
+
+system.runInterval(() => {
+    let players = world.getAllPlayers();
+    for (let player of players) {
+        if (player.hasTag(`cl-combatlogged`) && clSettings.get(`disableelytracombat`) === `true` && player.isGliding) {
+            stopGliding(player);
+        }
+
+        if (!player.hasTag(`cl-combatlogged`)) player.runCommand(`scoreboard players set @s combatlog ${clSettings.get(`combattime`) * 20}`);
+        else {
+            let combatscore = getScore(player, `combatlog`);
+            player.runCommand(`scoreboard players remove @s combatlog 1`);
+
+            player.runCommand(`title @s actionbar §eYou are §ccombat logged! §l§3(§p${formatTime(combatscore)}§3)`);
+        }
+
+        if (!player.hasTag(`cl-spawnkill`)) player.runCommand(`scoreboard players set @s spawnkill ${clSettings.get(`spawnkilltime`) * 20}`);
+        else {
+            player.removeTag(`cl-combatlogged`);
+
+            let spscore = getScore(player, `spawnkill`);
+            player.runCommand(`scoreboard players remove @s spawnkill 1`);
+            player.runCommand(`title @s actionbar §eYou are §cspawn protected! §l§3(§p${formatTime(spscore)}§3)`);
+        }
+
+        if (getScore(player, `spawnkill`) <= 0) {
+            player.removeTag(`cl-spawnkill`);
+            player.runCommand(`title @s actionbar §3You are no longer spawn protected!`);
+        }
+        if (getScore(player, `combatlog`) <= 0) {
+            player.runCommand(`title @s actionbar §3You are no longer in combat!`);
+            player.removeTag(`cl-combatlogged`);
+        }
+    }
+}, 1);
+
+world.beforeEvents.itemUse.subscribe(data => {
+    let player = data.source as Player;
+    let item = data.itemStack;
+
+    if (player.typeId !== `minecraft:player`) return;
+
+    if (item.typeId == `minecraft:ender_pearl` && player.hasTag(`cl-combatlogged`)) {
+        if (clSettings.get(`disabletpcombat`) !== `true`) return;
+        data.cancel = true;
+        sendPlayerMessage(player, `§4You are in combat!`);
+    }
+});
+
+
+function isBetween(vectorA: Vector3, vectorB: Vector3, vectorC: Vector3) {
+    return (
+        (vectorA.x <= vectorC.x && vectorC.x <= vectorB.x) ||
+        (vectorB.x <= vectorC.x && vectorC.x <= vectorA.x)
+    ) &&
+        (
+            (vectorA.y <= vectorC.y && vectorC.y <= vectorB.y) ||
+            (vectorB.y <= vectorC.y && vectorC.y <= vectorA.y)
+        ) &&
+        (
+            (vectorA.z <= vectorC.z && vectorC.z <= vectorB.z) ||
+            (vectorB.z <= vectorC.z && vectorC.z <= vectorA.z)
+        );
+}
+
+world.beforeEvents.playerBreakBlock.subscribe(data => {
+    for (const safezone of safezones.entries()) {
+        const coords = safezone[0].split(`--`);
+        const coords1 = new Vector3Builder(+coords[0], +coords[1], +coords[2]);
+        const coords2 = new Vector3Builder(+coords[3], +coords[4], +coords[5]);
+        const { x, y, z } = data.block.location;
+        const player = data.player;
+
+        if (isBetween(coords1, coords2, new Vector3Builder(x, y, z)) && (safezone[1] === `true` || safezone[1] === `both`) && !player.hasTag(`cl-staff`) && !player.isOp()) {
+            data.cancel = true;
+            sendPlayerMessage(player, `§cSorry§7, but you can't break that block here.`);
+        }
+    }
+});
+
+const directionsalt = (offset: number) => {
+    const x = 0, y = 0, z = 0;
+    return {
+        0: { x, y: y - offset, z },
+        1: { x, y: y + offset, z },
+        2: { x, y, z: z + offset },
+        3: { x, y, z: z - offset },
+        4: { x: x + offset, y, z },
+        5: { x: x - offset, y, z },
+        down: { x, y: y - offset, z },
+        up: { x, y: y + offset, z },
+        north: { x, y, z: z - offset },
+        south: { x, y, z: z + offset },
+        west: { x: x - offset, y, z },
+        east: { x: x + offset, y, z }
+    };
+};
+
+world.beforeEvents.playerPlaceBlock.subscribe(data => {
+    for (const safezone of safezones.entries()) {
+        const coords = safezone[0].split(`--`);
+        const coords1 = new Vector3Builder(+coords[0], +coords[1], +coords[2]);
+        const coords2 = new Vector3Builder(+coords[3], +coords[4], +coords[5]);
+        const { x, y, z } = data.block.offset(directionsalt(1)[data.face.toLowerCase() as keyof typeof directionsalt]);
+        const player = data.player;
+
+        if (isBetween(coords1, coords2, new Vector3Builder(x, y, z)) && (safezone[1] === `true` || safezone[1] === `both`) && !player.hasTag(`cl-staff`) && !player.isOp()) {
+            data.cancel = true;
+            sendPlayerMessage(player, `§cSorry§7, but you can't place that block here.`);
+        }
+    }
+});
+
+
+
+world.afterEvents.entityHurt.subscribe(data => {
+    for (const safezone of safezones.entries()) {
+        const coords = safezone[0].split(`--`);
+        const coords1 = new Vector3Builder(+coords[0], +coords[1], +coords[2]);
+        const coords2 = new Vector3Builder(+coords[3], +coords[4], +coords[5]);
+        const { x, y, z } = data.hurtEntity.location;
+        const player = data.hurtEntity;
+
+        if (isBetween(coords1, coords2, new Vector3Builder(x, y, z)) && player.typeId === `minecraft:player` && data.damageSource.damagingEntity && (safezone[1] === `false` || safezone[1] === `both`) && !player.hasTag(`cl-staff`) && data.damageSource.damagingEntity?.typeId === `minecraft:player`) {
+            const health = player.getComponent(`health`);
+
+            health.setCurrentValue(health.currentValue + data.damage);
+            sendPlayerMessage(data.damageSource.damagingEntity as Player, `§cCannot hurt people in a safezone!`);
+
+            data.damageSource.damagingEntity.addEffect(`weakness`, 10, { amplifier: 255 });
+            player.addEffect(`resistance`, 20, { amplifier: 255 });
+        }
+    }
+});
+
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
+    if (initialSpawn == false) return;
+
+    if (!world.scoreboard.getObjective(`combatlog`))
+        world.scoreboard.addObjective(`combatlog`, `combatTimer`);
+    if (!world.scoreboard.getObjective(`spawnkill`))
+        world.scoreboard.addObjective(`spawnkill`, `spawnKillTimer`);
+
+    if (player.hasTag(`cl-combatlogged`)) {
+        player.removeTag(`cl-combatlogged`);
+        player.runCommand(`gamemode s @s`);
+
+        if (world.getDynamicProperty(`lifesteal:envsteal`) === false) {
+            addScore(player, `ls-death`, world.getDynamicProperty(`lifesteal:heartlose`) as number);
+        }
+        if (clSettings.get(`itemdroplog`) == `true`) {
+            player.runCommandAsync(`clear @s`).then(() => {
+                player.kill();
+                sendAllMessage(`§c${+clSettings.get(`bantime`) !== 0 ? `Banned` : `Killed`} ${player.name} for §6Combat Logging`);
+            });
+        } else {
+            player.kill();
+            sendAllMessage(`§c${+clSettings.get(`bantime`) !== 0 ? `Banned` : `Killed`} ${player.name} for §6Combat Logging (turn off keepinventory if items didn't drop)`);
+        }
+
+        system.run(() => {
+            if (+clSettings.get(`bantime`) !== 0) {
+                if (!bannedplayers.get(`${player.id}`)) bannedplayers.set(`${player.id}`, `${Date.now() + +clSettings.get(`bantime`) * 1000}`);
+                const endTime = bannedplayers.get(`${player.id}`);
+                const currentTime = Date.now();
+
+                if (currentTime < endTime) {
+                    player.runCommand(`kick ${player.name} §cYou combat logged!\n\n§cYou will be unbanned in §6${timeStamp(endTime - currentTime)}`);
+
+                    // For debugging
+                    sendPlayerMessage(player, `§cYou combat logged!\n\n§cYou will be unbanned in §6${timeStamp(endTime - currentTime)}`);
+                }
+            }
+        });
+    }
+    sendPlayerMessage(player, `\xA74-----
+\xA7cThis world/realm/server is protected by Anti Combat Log by rasiav
+\xA76AntiCL version: ${clVersion}
+Command Prefix: \xA7l${config.prefix}\xA7r`);
+});
+
+/**
+ * stole this from papi (hi papi!!)
+ * @name timeStamp
+ * @param {number} time The milliseconds number which needs to be formatted.
+ * @example timeStamp(20000);
+ * @remarks Formats the milliseconds to a week, day, hour, minute, second format.
+ * @returns {string} Returns the formatted timestamp string.
+ */
+const timeStamp = (time: number): string => {
+    let seconds: number = Math.floor(time / 1000);
+    let minutes: number = Math.floor(seconds / 60);
+    let hours: number = Math.floor(minutes / 60);
+    let days: number = Math.floor(hours / 24);
+    const weeks: number = Math.floor(days / 7);
+
+    seconds %= 60;
+    minutes %= 60;
+    hours %= 24;
+    days %= 7;
+
+    const duration: string[] = [];
+    if (weeks) duration.push(`${weeks} week${weeks > 1 ? `s` : ``}`);
+    if (days) duration.push(`${days} day${days > 1 ? `s` : ``}`);
+    if (hours) duration.push(`${hours} hour${hours > 1 ? `s` : ``}`);
+    if (minutes) duration.push(`${minutes} minute${minutes > 1 ? `s` : ``}`);
+    if (seconds) duration.push(`${seconds} second${seconds > 1 ? `s` : ``}`);
+
+    if (duration.length) return duration.join(`, `);
+    else return `0 seconds`;
+};
